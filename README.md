@@ -1,5 +1,3 @@
-
-```markdown
 # Grocery Purchase Proposal
 
 A Python tool that recommends grocery items using Apriori-based association rule mining on the “Groceries” dataset.
@@ -39,7 +37,7 @@ pip install pandas mlxtend
 
 3. Run the main script:
     ```bash
-    python main.py
+    python purch_proposal.py
     ```
 
 4. Follow the on-screen instructions to get recommendations.
