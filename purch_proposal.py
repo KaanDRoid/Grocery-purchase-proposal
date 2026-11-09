@@ -1,5 +1,6 @@
+import os
+
 import pandas as pd
-import numpy as np
 from mlxtend.frequent_patterns import apriori, association_rules
 from mlxtend.preprocessing import TransactionEncoder
 import warnings
@@ -13,6 +14,9 @@ MIN_CONFIDENCE_PRIMARY = 0.01    # 1% - primary confidence threshold
 MIN_CONFIDENCE_SECONDARY = 0.005 # 0.5% - fallback confidence threshold
 MIN_CONFIDENCE_MINIMUM = 0.001   # 0.1% - minimum confidence threshold
 
+# Look for the dataset next to this script so it runs from any working directory
+DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Groceries_dataset.csv')
+
 def load_groceries_data():
     """
     Load and prepare the groceries dataset for association rules mining.
@@ -23,7 +27,7 @@ def load_groceries_data():
     try:
         # Load the real groceries dataset
         print("Loading Groceries_dataset.csv...")
-        data = pd.read_csv('Groceries_dataset.csv')
+        data = pd.read_csv(DATA_PATH)
         
         # Group transactions by Member_number and Date to create market baskets
         transactions = data.groupby(['Member_number', 'Date'])['itemDescription'].apply(list).tolist()
@@ -48,7 +52,7 @@ def load_groceries_data():
         return df
         
     except FileNotFoundError:
-        print("Groceries_dataset.csv not found. Please ensure the file is in the current directory.")
+        print(f"Groceries_dataset.csv not found at {DATA_PATH}.")
         return None
     except Exception as e:
         print(f"Error loading data: {e}")
@@ -137,36 +141,29 @@ def find_best_recommendation(input_items, rules):
     """
     if rules.empty:
         return None
-    
-    # Convert input items to frozenset for comparison
+
     input_set = frozenset(input_items)
-    
-    # First, try to find rules where the antecedent matches exactly
+    # never suggest something the user already has
+    rules = rules[rules['consequents'].apply(lambda c: c.isdisjoint(input_set))]
+
+    # First, try rules whose antecedent matches the input exactly
     matching_rules = rules[rules['antecedents'] == input_set]
-    
-    if not matching_rules.empty:
-        # Return the consequent with highest confidence
-        best_rule = matching_rules.loc[matching_rules['confidence'].idxmax()]
-        consequent = list(best_rule['consequents'])[0]
-        return consequent
-    
-    # If no exact match, try to find rules for the first item with highest confidence
-    if input_items:
-        first_item = input_items[0]
-        first_item_set = frozenset([first_item])
-        
-        first_item_rules = rules[rules['antecedents'] == first_item_set]
-        
-        if not first_item_rules.empty:
-            best_rule = first_item_rules.loc[first_item_rules['confidence'].idxmax()]
-            consequent = list(best_rule['consequents'])[0]
-            return consequent
-    
-    return None
+
+    # Otherwise fall back to rules for the first item only
+    if matching_rules.empty and input_items:
+        matching_rules = rules[rules['antecedents'] == frozenset([input_items[0]])]
+
+    if matching_rules.empty:
+        return None
+
+    # Return the consequent of the rule with the highest confidence
+    best_rule = matching_rules.loc[matching_rules['confidence'].idxmax()]
+    return ', '.join(sorted(best_rule['consequents']))
+
 
 def main():
     """
-    Main function to run the purchase proposal system. I hope its look cool
+    Load the data, mine the rules and run the interactive prompt.
     """
     print("=" * 60)
     print("  GROCERY PURCHASE PROPOSAL SYSTEM")
@@ -204,14 +201,14 @@ def main():
         ant = ', '.join(list(rule['antecedents']))
         con = ', '.join(list(rule['consequents']))
         conf = rule['confidence']
-        print(f"  {ant} → {con} (confidence: {conf:.2%})")
+        print(f"  {ant} -> {con} (confidence: {conf:.2%})")
     print()
     
     # Interactive recommendation loop 
     print("RECOMMENDATION SYSTEM")
     print("-" * 30)
     print("Enter items (comma-separated, 1-3 items max)")
-    print("Example: whole milk, bread")
+    print("Example: whole milk, rolls/buns")
     print("Type 'quit' to exit")
     print()
     
@@ -222,7 +219,7 @@ def main():
             
             # Check for exit condition
             if user_input.lower() in ['quit', 'exit', 'q']:
-                print("Thank you for using the Purchase Proposal System! See ya!")
+                print("Bye.")
                 break
             
             # Parse input items
@@ -237,7 +234,7 @@ def main():
             valid_items = [item for item in input_items if item in available_items]
             
             if not valid_items:
-                print(f"None of the items found in dataset.")
+                print("None of the items were found in the dataset.")
                 print(f"Available items include: {', '.join(sorted(list(available_items)[:10]))}...")
                 continue
             
